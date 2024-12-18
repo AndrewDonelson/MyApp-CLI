@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -12,13 +11,42 @@ import (
 	"strings"
 )
 
+/**
+* Build production Binary
+* go build -ldflags "-X main.version=$(date +%Y.%m.%d.%H%M%S)" -o myapp-cli.exe
+*
+* Example:
+* go build -ldflags "-X main.version=2024.12.18.143000" -o myapp-cli.exe
+*
+* Note: Version format is YYYY.MM.DD.HHMMSS (24hr time)
+ */
+
+// Version will be set at build time
+var version string
+
 const (
-	repoURL          = "https://github.com/AndrewDonelson/my-app"
+	// Company Information
+	CompanyName = "Nlaak Studios"
+	WebsiteURL  = "https://nlaak.com"
+
+	// Directory Settings
+	projectsDir        = "C:\\Users\\andre\\NextJS-Projects"
+	webappsDir         = "webapps"
+	repoURL            = "https://github.com/AndrewDonelson/my-app"
 	defaultProjectName = "my-new-app"
 )
 
 type CommandRunner struct {
 	isWindows bool
+}
+
+func displayHeader() {
+	if version == "" {
+		version = "dev.build"
+	}
+	fmt.Printf("\n%s WebApp Utility v%s\n", CompanyName, version)
+	fmt.Printf("----------------------------------------\n")
+	fmt.Printf("Website: %s\n\n", WebsiteURL)
 }
 
 func NewCommandRunner() *CommandRunner {
@@ -67,48 +95,67 @@ func checkPrerequisites(cr *CommandRunner) error {
 	return nil
 }
 
-func checkSetupScript(projectPath string) bool {
-	envPath := filepath.Join(projectPath, ".env.local")
-	file, err := os.Open(envPath)
-	if err != nil {
-		return false
+func ensureWebappsDir() error {
+	fullWebappsPath := filepath.Join(projectsDir, webappsDir)
+	if err := os.MkdirAll(fullWebappsPath, 0755); err != nil {
+		return fmt.Errorf("failed to create webapps directory: %v", err)
 	}
-	defer file.Close()
+	return nil
+}
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "SETUP_SCRIPT_RAN=1") {
-			return true
-		}
-	}
-	return false
+func isProjectExists(name string) bool {
+	projectPath := filepath.Join(projectsDir, webappsDir, name)
+	_, err := os.Stat(projectPath)
+	return !os.IsNotExist(err)
 }
 
 func promptProjectName() string {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("Enter the name for your new WebApp (default: %s): ", defaultProjectName)
-	name, err := reader.ReadString('\n')
-	if err != nil {
-		return defaultProjectName
-	}
 
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return defaultProjectName
+	for {
+		fmt.Printf("Enter the name for your new WebApp (default: %s): ", defaultProjectName)
+		name, err := reader.ReadString('\n')
+		if err != nil {
+			return defaultProjectName
+		}
+
+		name = strings.TrimSpace(name)
+		if name == "" {
+			name = defaultProjectName
+		}
+
+		if isProjectExists(name) {
+			fmt.Printf("\nA project with the name '%s' already exists. Please choose a different name.\n\n", name)
+			continue
+		}
+
+		// Basic name validation
+		if strings.ContainsAny(name, "\\/:*?\"<>|") {
+			fmt.Println("\nProject name contains invalid characters. Please use only letters, numbers, dashes, and underscores.\n")
+			continue
+		}
+
+		return name
 	}
-	return name
 }
 
 func createProject(cr *CommandRunner, projectName string) error {
-	// Get absolute path for the project
-	projectPath, err := filepath.Abs(projectName)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %v", err)
+	if err := ensureWebappsDir(); err != nil {
+		return err
 	}
 
-	// Check if project directory already exists
-	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
+	// Get absolute path for the project within webapps directory
+	fullWebappsPath := filepath.Join(projectsDir, webappsDir)
+	projectPath := filepath.Join(fullWebappsPath, projectName)
+
+	// Already checked in promptProjectName, but double-check
+	if isProjectExists(projectName) {
 		return fmt.Errorf("directory %s already exists", projectPath)
+	}
+
+	// First change to the webapps directory
+	if err := os.Chdir(fullWebappsPath); err != nil {
+		return fmt.Errorf("failed to change to webapps directory: %v", err)
 	}
 
 	fmt.Printf("Creating new WebApp: %s\n", projectName)
@@ -123,23 +170,73 @@ func createProject(cr *CommandRunner, projectName string) error {
 		return fmt.Errorf("failed to change to project directory: %v", err)
 	}
 
+	// Remove existing git directory
+	if err := os.RemoveAll(".git"); err != nil {
+		return fmt.Errorf("failed to remove existing .git directory: %v", err)
+	}
+
+	// Initialize new git repository
+	fmt.Println("Initializing new git repository...")
+	if err := cr.execCommand("git", "init"); err != nil {
+		return fmt.Errorf("failed to initialize git repository: %v", err)
+	}
+
+	// Set up initial commit
+	if err := cr.execCommand("git", "add", "."); err != nil {
+		return fmt.Errorf("failed to stage files: %v", err)
+	}
+
+	if err := cr.execCommand("git", "commit", "-m", "Initial commit"); err != nil {
+		return fmt.Errorf("failed to create initial commit: %v", err)
+	}
+
+	// Clean install node_modules
+	fmt.Println("Cleaning existing node_modules...")
+	if err := os.RemoveAll("node_modules"); err != nil {
+		return fmt.Errorf("failed to remove node_modules: %v", err)
+	}
+
+	// Clean package-lock.json
+	if err := os.Remove("package-lock.json"); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove package-lock.json: %v", err)
+	}
+
 	// Install dependencies
 	fmt.Println("Installing dependencies...")
 	if err := cr.execCommand(cr.getNPMCommand(), "install"); err != nil {
 		return fmt.Errorf("failed to install dependencies: %v", err)
 	}
 
+	// Modify package.json to remove predev script temporarily
+	fmt.Println("Adjusting package.json for initial setup...")
+	packageJSON, err := os.ReadFile("package.json")
+	if err != nil {
+		return fmt.Errorf("failed to read package.json: %v", err)
+	}
+
+	// Create backup of original package.json
+	if err := os.WriteFile("package.json.backup", packageJSON, 0644); err != nil {
+		return fmt.Errorf("failed to create package.json backup: %v", err)
+	}
+
+	// Replace predev script with simpler version
+	packageJSONStr := string(packageJSON)
+	packageJSONStr = strings.Replace(packageJSONStr,
+		`"predev": "npx convex dev --until-success && node setup.mjs --once && npx convex dashboard"`,
+		`"predev": "echo Skipping predev script for initial setup"`,
+		1)
+
+	if err := os.WriteFile("package.json", []byte(packageJSONStr), 0644); err != nil {
+		return fmt.Errorf("failed to write modified package.json: %v", err)
+	}
+
+	fmt.Println("\nProject setup completed successfully!")
 	return nil
 }
 
-func startDevServer(cr *CommandRunner) error {
-	return cr.execCommand(cr.getNPMCommand(), "run", "dev")
-}
-
 func main() {
-	// Parse command line flags
-	skipSetup := flag.Bool("skip-setup", false, "Skip setup and just start the dev server")
-	flag.Parse()
+	// Display header
+	displayHeader()
 
 	cr := NewCommandRunner()
 
@@ -148,15 +245,12 @@ func main() {
 		log.Fatalf("Prerequisite check failed: %v", err)
 	}
 
-	// If skip-setup is true and we're in a project directory, just start the dev server
-	if *skipSetup {
-		if err := startDevServer(cr); err != nil {
-			log.Fatalf("Failed to start development server: %v", err)
-		}
-		return
+	// Ensure webapps directory exists
+	if err := ensureWebappsDir(); err != nil {
+		log.Fatalf("Failed to setup projects directory: %v", err)
 	}
 
-	// Get project name
+	// Get project name with validation
 	projectName := promptProjectName()
 
 	// Create the project
@@ -164,13 +258,10 @@ func main() {
 		log.Fatalf("Failed to create project: %v", err)
 	}
 
-	// Check if setup script has already run
-	if checkSetupScript(projectName) {
-		fmt.Println("Setup script has already run. Starting development server...")
-	}
-
-	// Start the development server
-	if err := startDevServer(cr); err != nil {
-		log.Fatalf("Failed to start development server: %v", err)
-	}
+	// Instead of trying to change the directory, provide the command
+	projectPath := filepath.Join(projectsDir, webappsDir, projectName)
+	fmt.Println("\nTo continue setup, run these commands:")
+	fmt.Printf("\n   cd %s\n", projectPath)
+	fmt.Println("   mv package.json.backup package.json")
+	fmt.Println("   npm run dev")
 }

@@ -207,28 +207,28 @@ func createProject(cr *CommandRunner, projectName string) error {
 		return fmt.Errorf("failed to install dependencies: %v", err)
 	}
 
-	// Modify package.json to remove predev script temporarily
-	fmt.Println("Adjusting package.json for initial setup...")
-	packageJSON, err := os.ReadFile("package.json")
-	if err != nil {
-		return fmt.Errorf("failed to read package.json: %v", err)
-	}
+	// // Modify package.json to remove predev script temporarily
+	// fmt.Println("Adjusting package.json for initial setup...")
+	// packageJSON, err := os.ReadFile("package.json")
+	// if err != nil {
+	// 	return fmt.Errorf("failed to read package.json: %v", err)
+	// }
 
-	// Create backup of original package.json
-	if err := os.WriteFile("package.json.backup", packageJSON, 0644); err != nil {
-		return fmt.Errorf("failed to create package.json backup: %v", err)
-	}
+	// // Create backup of original package.json
+	// if err := os.WriteFile("package.json.backup", packageJSON, 0644); err != nil {
+	// 	return fmt.Errorf("failed to create package.json backup: %v", err)
+	// }
 
-	// Replace predev script with simpler version
-	packageJSONStr := string(packageJSON)
-	packageJSONStr = strings.Replace(packageJSONStr,
-		`"predev": "npx convex dev --until-success && node setup.mjs --once && npx convex dashboard"`,
-		`"predev": "echo Skipping predev script for initial setup"`,
-		1)
+	// // Replace predev script with simpler version
+	// packageJSONStr := string(packageJSON)
+	// packageJSONStr = strings.Replace(packageJSONStr,
+	// 	`"predev": "npx convex dev --until-success && node setup.mjs --once && npx convex dashboard"`,
+	// 	`"predev": "echo Skipping predev script for initial setup"`,
+	// 	1)
 
-	if err := os.WriteFile("package.json", []byte(packageJSONStr), 0644); err != nil {
-		return fmt.Errorf("failed to write modified package.json: %v", err)
-	}
+	// if err := os.WriteFile("package.json", []byte(packageJSONStr), 0644); err != nil {
+	// 	return fmt.Errorf("failed to write modified package.json: %v", err)
+	// }
 
 	fmt.Println("\nProject setup completed successfully!")
 	return nil

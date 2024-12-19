@@ -131,7 +131,7 @@ func promptProjectName() string {
 
 		// Basic name validation
 		if strings.ContainsAny(name, "\\/:*?\"<>|") {
-			fmt.Println("\nProject name contains invalid characters. Please use only letters, numbers, dashes, and underscores.\n")
+			fmt.Println("Project name contains invalid characters. Please use only letters, numbers, dashes, and underscores.")
 			continue
 		}
 
@@ -206,29 +206,6 @@ func createProject(cr *CommandRunner, projectName string) error {
 	if err := cr.execCommand(cr.getNPMCommand(), "install"); err != nil {
 		return fmt.Errorf("failed to install dependencies: %v", err)
 	}
-
-	// // Modify package.json to remove predev script temporarily
-	// fmt.Println("Adjusting package.json for initial setup...")
-	// packageJSON, err := os.ReadFile("package.json")
-	// if err != nil {
-	// 	return fmt.Errorf("failed to read package.json: %v", err)
-	// }
-
-	// // Create backup of original package.json
-	// if err := os.WriteFile("package.json.backup", packageJSON, 0644); err != nil {
-	// 	return fmt.Errorf("failed to create package.json backup: %v", err)
-	// }
-
-	// // Replace predev script with simpler version
-	// packageJSONStr := string(packageJSON)
-	// packageJSONStr = strings.Replace(packageJSONStr,
-	// 	`"predev": "npx convex dev --until-success && node setup.mjs --once && npx convex dashboard"`,
-	// 	`"predev": "echo Skipping predev script for initial setup"`,
-	// 	1)
-
-	// if err := os.WriteFile("package.json", []byte(packageJSONStr), 0644); err != nil {
-	// 	return fmt.Errorf("failed to write modified package.json: %v", err)
-	// }
 
 	fmt.Println("\nProject setup completed successfully!")
 	return nil

@@ -262,6 +262,5 @@ func main() {
 	projectPath := filepath.Join(projectsDir, webappsDir, projectName)
 	fmt.Println("\nTo continue setup, run these commands:")
 	fmt.Printf("\n   cd %s\n", projectPath)
-	fmt.Println("   mv package.json.backup package.json")
 	fmt.Println("   npm run dev")
 }
